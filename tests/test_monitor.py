@@ -64,6 +64,28 @@ class TestGetProcessList(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["pid"], 5678)
 
+    @patch("process_monitor.monitor.psutil.process_iter")
+    def test_skips_process_when_access_is_denied(self, mock_process_iter):
+        class DeniedProcess:
+            @property
+            def info(self):
+                raise psutil.AccessDenied(pid=1234)
+
+        valid_process = MagicMock()
+        valid_process.info = {
+            "pid": 5678,
+            "name": "valid-process",
+            "status": "sleeping",
+            "num_threads": 1,
+        }
+
+        mock_process_iter.return_value = [DeniedProcess(), valid_process]
+
+        records = get_process_list()
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["pid"], 5678)
+
 
 if __name__ == "__main__":
     unittest.main()
