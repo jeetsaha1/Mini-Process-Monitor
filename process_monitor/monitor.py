@@ -43,3 +43,40 @@ def get_process_list() -> list[dict]:
             continue
 
     return processes
+
+
+
+
+# Member 3: System CPU monitoring
+
+_cpu_sampling_started = False
+
+
+def get_cpu_stats() -> dict:
+    """Return system-wide CPU usage and sampling metadata."""
+    global _cpu_sampling_started
+
+    cores = psutil.cpu_count(logical=True) or 1
+
+    try:
+        if not _cpu_sampling_started:
+            psutil.cpu_percent(interval=None)
+            _cpu_sampling_started = True
+            return {
+                "total_percent": None,
+                "cores": cores,
+                "status": "sampling",
+            }
+
+        return {
+            "total_percent": psutil.cpu_percent(interval=None),
+            "cores": cores,
+            "status": "active",
+        }
+
+    except psutil.Error:
+        return {
+            "total_percent": None,
+            "cores": cores,
+            "status": "unavailable",
+        }
