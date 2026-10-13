@@ -3,43 +3,43 @@
 import psutil
 
 
+
 def get_process_list() -> list[dict]:
-    """Return normalized information about accessible system processes.
-
-    Missing metrics are represented by None. Processes that disappear
-    during collection are skipped, and permission errors do not crash
-    the entire process listing.
-    """
+    """Return normalized information about accessible system processes."""
     processes = []
-
     attributes = ["pid", "name", "status", "num_threads"]
 
     for proc in psutil.process_iter(attrs=attributes):
         try:
             info = proc.info
 
-            processes.append(
-                {
-                    "pid": info.get("pid"),
-                    "name": info.get("name"),
-                    "status": info.get("status"),
-                    "cpu_percent": None,
-                    "memory_mb": None,
-                    "memory_percent": None,
-                    "thread_count": info.get("num_threads"),
-                }
-            )
+            memory_mb = None
+            memory_percent = None
 
-        except (psutil.NoSuchProcess, psutil.ZombieProcess):
-            # The process ended or became a zombie during collection.
-            continue
+            try:
+                memory_info = proc.memory_info()
+                memory_mb = round(
+                    memory_info.rss / (1024 ** 2), 2
+                )
+                memory_percent = round(
+                    proc.memory_percent(), 2
+                )
+            except psutil.Error:
+                # Keep the process even if memory access fails.
+                pass
 
-        except psutil.AccessDenied:
-            # Do not crash the entire listing because of permissions.
-            continue
+            processes.append({
+                "pid": info.get("pid"),
+                "name": info.get("name"),
+                "status": info.get("status"),
+                "cpu_percent": None,
+                "memory_mb": memory_mb,
+                "memory_percent": memory_percent,
+                "thread_count": info.get("num_threads"),
+            })
 
         except psutil.Error:
-            # Handle other expected psutil-related failures.
+             # Skip processes that disappear or cannot be accessed.
             continue
 
     return processes
@@ -80,3 +80,41 @@ def get_cpu_stats() -> dict:
             "cores": cores,
             "status": "unavailable",
         }
+
+# Member 4: Memory monitoring  
+def get_memory_stats() -> dict:
+    """Return system-wide memory usage statistics."""
+    try:
+        memory = psutil.virtual_memory()
+
+        return {
+            "total_mb": round(memory.total / (1024 ** 2), 2),
+            "used_mb": round(memory.used / (1024 ** 2), 2),
+            "available_mb": round(memory.available / (1024 ** 2), 2),
+            "percent": memory.percent,
+            "status": "active",
+        }
+
+    except psutil.Error:
+        return {
+            "total_mb": None,
+            "used_mb": None,
+            "available_mb": None,
+            "percent": None,
+            "status": "unavailable",
+        }
+
+def format_memory(bytes_value: int | None) -> str:
+    """Convert bytes into a human-readable memory string."""
+    if bytes_value is None:
+        return "N/A"
+
+    size = float(bytes_value)
+
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024 or unit == "TB":
+            return f"{size:.2f} {unit}"
+        size /= 1024
+
+    return "N/A"
+
